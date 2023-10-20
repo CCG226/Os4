@@ -12,7 +12,7 @@ struct PCB {
 	pid_t pid; //worker process id
 	int startSeconds;//second launched
 	int startNano; //nanosecond launched
-	int servicesTimeSeconds;
+	int serviceTimeSeconds;
 	int serviceTimeNano;
 	int eventWaitSec;
 	int eventWaitNano;
@@ -40,11 +40,11 @@ int StartSystemClock(struct Sys_Time **Clock);
 void StopSystemClock(struct Sys_Time *Clock, int sharedMemoryId);
 
 //increments clock
-void RunSystemClock(struct Sys_Time *Clock);
+void RunSystemClock(struct Sys_Time *Clock, int incRate);
 
 //handles how many workers are laucnhed, tracks the works in process table, and controls how long workers work
 //workAmount = n value, workerSimLimit = -s value, workerTimeLimit = -t value, logFile = -f value, OsClock = shared memory clock, table is process pcb table 
-void WorkerHandler(int workerAmount, int workerSimLimit, int workerTimeLimit,char* logFile, struct Sys_Time* OsClock, struct PCB table[]);
+void WorkerHandler(int workerAmount, int workerSimLimit, int timeInterval,char* logFile, struct Sys_Time* OsClock, struct PCB table[]);
 
 //logs a particular message to logfile dependent on msgType value using logger
 //if msgType is 'Terminating' print message about worker going to terminate soon
@@ -75,18 +75,22 @@ void PrintProcessTable(struct PCB processTable[],int curTimeSeconds, int curTime
 //constructor for process table
 void BuildProcessTable(struct PCB table[]);
 //returns 0 if 1/2 second has passed, else it return 1
-int HasHalfSecPassed(int nanoseconds);
+int HasHalfSecPassed(int currentSec, int currentNano, int halfSecMark, int halfNanoMark);
+
 //creates message queue and returns message queues id
 int ConstructMsgQueue();
 //destroys message queue via id 
 void DestructMsgQueue(int msqid);
 //sends request to specific worker using workers pid via message queue
 //and recieves a response about workers status to see if worker is done or not
-int SendAndRecieveStatusMsg(int msqid, pid_t worker_id);
+msgbuffer SendAndRecieveScheduleMsg(int msqid, pid_t worker_id);
 //determines next worket os will message in the system
 //using the process table and a index value passed by reference to track previous worker messaged
 pid_t GetNxtWorkerToMsg(struct PCB processTable[], int* curIndex);
 
+int CanLaunchWorker(int currentSecond,int currentNano,int LaunchTimeSec,int LaunchTimeNano);
+
+void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano, int* eventSec, int* eventNano);
 //proccess table state values, 1 means process is running, 0 means process is terminated
 
 const int STATE_BLOCKED = 3;
@@ -98,6 +102,10 @@ const int STATE_RUNNING = 1;
 const int STATE_TERMINATED = 0;
 
 const int TABLE_SIZE = 20;
+
+const int MAX_NANOSECOND = 1000000000;
+
+const int SCHEDULE_TIME = 50000000;
 
 const int MSG_SYSTEM_KEY = 5303;
 

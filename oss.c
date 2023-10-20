@@ -65,7 +65,7 @@ int main(int argc, char** argv)
 	//default values for argument variables are 0
 	int workerAmount = 0;//-n proc value (number of workers to launch)
 	int simultaneousLimit = 0;//-s simul value (number of workers to run in sync)
-	int timeLimit = 0;//-t iter value (number to pass to worker as parameter)
+	int timeInterval = 0;//-t iter value (number to pass to worker as parameter)
 	char* logFileName = NULL;//-f value to store file name of log file
 
 
@@ -73,13 +73,13 @@ int main(int argc, char** argv)
 	int shm_ClockId = -1;
 
 	//pass workerAmount (-n), simultaneousLimit (-s),timeLimit(-t) by reference and assigns coresponding argument values from the command line to them
-	ArgumentParser(argc, argv,&workerAmount, &simultaneousLimit, &timeLimit, &logFileName);
+	ArgumentParser(argc, argv,&workerAmount, &simultaneousLimit, &timeInterval, &logFileName);
 	
 	//'starts' aka sets up shared memory system clock and assigns default values for clock 
 	shm_ClockId = StartSystemClock(&OS_Clock);
 
 	//handles how os laumches, tracks, and times workers
-	WorkerHandler(workerAmount, simultaneousLimit, timeLimit,logFileName, OS_Clock, processTable);
+	WorkerHandler(workerAmount, simultaneousLimit, timeInterval,logFileName, OS_Clock, processTable);
 
 	//removes system clock from shared mem
 	StopSystemClock(OS_Clock ,shm_ClockId);
@@ -108,12 +108,12 @@ void DestructMsgQueue(int msqid)
 		exit(1);
 	}
 }
-int SendAndRecieveStatusMsg(int msqid, pid_t workerId) 
+msgbuffer SendAndRecieveScheduleMsg(int msqid, pid_t workerId) 
 {
 	msgbuffer msg;
 	//send message to specific worker via id, Data sent doesnt matter we should want to notify worker via message to get a status update from them
 	msg.mtype = (int) workerId;
-	msg.timeslice = 50000000;
+	msg.timeslice = SCHEDULE_TIME;
 	msg.eventWaitTime = 0;	
 	if(msgsnd(msqid, &msg, sizeof(msgbuffer)-sizeof(long),0) == -1)
 	{
@@ -130,7 +130,7 @@ int SendAndRecieveStatusMsg(int msqid, pid_t workerId)
 		exit(1);
 
 	}
-	return msg.timeslice;
+	return msg;
 
 }
 int StartSystemClock(struct Sys_Time **Clock)
@@ -151,7 +151,7 @@ int StartSystemClock(struct Sys_Time **Clock)
 	}
 	//set default clock values
 	//clock speed is 50000 nanoseconds per 'tick'
-	(*Clock)->rate = 50000;
+	(*Clock)->rate = 0;
 	(*Clock)->seconds = 0;
 	(*Clock)->nanoseconds = 0;
 
@@ -170,22 +170,29 @@ void StopSystemClock(struct Sys_Time *Clock, int sharedMemoryId)
 		exit(1);
 	}
 }
-void RunSystemClock(struct Sys_Time *Clock) {
-	//handles clock iteration / ticking
-	if(Clock->nanoseconds < 1000000000)
+void RunSystemClock(struct Sys_Time *Clock, int incRate) {
+
+	if(incRate < 0)
 	{
-		Clock->nanoseconds += Clock->rate;	
+	incRate = incRate * -1;
 	}
-	if(Clock->nanoseconds == 1000000000)
-	{ //nanoseconds reack 1,000,000,000 then reset nanoseconds and iterate clock
-		Clock->seconds++;
-		Clock->nanoseconds = 0;	 
+
+	Clock->rate = incRate;
+	//handles clock iteration / ticking
+	if((Clock->nanoseconds + Clock->rate) >= MAX_NANOSECOND)
+	{
+		Clock->nanoseconds = (Clock->nanoseconds + Clock->rate) - MAX_NANOSECOND;	
+		Clock->seconds = Clock->seconds + 1;
 	}
+	else {
+	Clock->nanoseconds = Clock->nanoseconds + Clock->rate;
+	}
+	
 
 }
 
 
-void ArgumentParser(int argc, char** argv, int* workerAmount, int* workerSimLimit, int* workerTimeLimit, char** fileName) {
+void ArgumentParser(int argc, char** argv, int* workerAmount, int* workerSimLimit, int* timeInterval, char** fileName) {
 	//assigns argument values to workerAmount, simultaneousLimit, workerArg variables in main using ptrs 
 	int option;
 	//getopt to iterate over CL options
@@ -203,7 +210,7 @@ void ArgumentParser(int argc, char** argv, int* workerAmount, int* workerSimLimi
 				*(workerSimLimit) = atoi(optarg);
 				break;
 			case 't'://if t int_value
-				*(workerTimeLimit) = atoi(optarg);
+				*(timeInterval) = atoi(optarg);
 				break;
 			case 'f':
 				*(fileName) = optarg;
@@ -215,7 +222,7 @@ void ArgumentParser(int argc, char** argv, int* workerAmount, int* workerSimLimi
 
 	}
 	//check if arguments are valid 
-	int isValid = ValidateInput(*workerAmount, *workerSimLimit, *workerTimeLimit, *fileName);
+	int isValid = ValidateInput(*workerAmount, *workerSimLimit, *timeInterval, *fileName);
 
 	if(isValid == 0)
 	{//valid arguments 
@@ -226,7 +233,7 @@ void ArgumentParser(int argc, char** argv, int* workerAmount, int* workerSimLimi
 		exit(1);
 	}
 }
-int ValidateInput(int workerAmount, int workerSimLimit, int workerTimeLimit, char* fileName)
+int ValidateInput(int workerAmount, int workerSimLimit, int timeInterval, char* fileName)
 {
 	//acts a bool	
 	int isValid = 0;
@@ -241,7 +248,7 @@ int ValidateInput(int workerAmount, int workerSimLimit, int workerTimeLimit, cha
 	}
 	fclose(tstPtr);
 	//arguments cant be negative 
-	if(workerAmount < 0 || workerSimLimit < 0 || workerTimeLimit < 0)
+	if(workerAmount < 0 || workerSimLimit < 0 || timeInterval < 0)
 	{
 		printf("\nInput Arguments Cannot Be Negative Number!\n");	 
 		isValid = 1;	
@@ -263,9 +270,9 @@ int ValidateInput(int workerAmount, int workerSimLimit, int workerTimeLimit, cha
 		printf("\nWe Need To Be Able To Launch At Least 1 Worker At A Time!\n");
 		isValid = 1;
 	}
-	if(workerTimeLimit < 1)
+	if(timeInterval > MAX_NANOSECOND)
 	{
-		printf("\nWorkers Need At Least A Second To Complete Their Task!\n");
+		printf("\nTime Interval must be less than 1 second!\n");
 		isValid = 1;
 	}
 	return isValid;
@@ -286,7 +293,7 @@ pid_t GetNxtWorkerToMsg(struct PCB table[], int* curIndex)
 
 		}
 
-		if(table[*(curIndex)].state == STATE_RUNNING)
+		if(table[*(curIndex)].state == STATE_READY)
 		{//if we find a running worker on the table assign ints pid to local var and escape loop
 			nxtWorker = table[*(curIndex)].pid;
 
@@ -316,7 +323,7 @@ void LogMessage(FILE** logger,const char* msgType,int workerIndex,pid_t workerId
 
 
 }
-void WorkerHandler(int workerAmount, int workerSimLimit,int workerTimeLimit, char* logFile, struct Sys_Time* OsClock, struct PCB processTable[])
+void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* logFile, struct Sys_Time* OsClock, struct PCB processTable[])
 {	//access logfile
 	FILE *logger = fopen(logFile, "w");
 	//get id of message queue after creating ti
@@ -330,54 +337,74 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int workerTimeLimit, cha
 	int workersComplete = 0;
 
 	//tracks amount of workers left to be launched
-	int workersLeft = 0;
+	int workersLeftToLaunch = workerAmount;
 
 
-	if(workerSimLimit > workerAmount)
-	{
-		//if (-s) values is greater than (-n) value, then launch all workers at once	
-		WorkerLauncher(workerAmount, processTable, OsClock);
-		//no more workers left to be launched
-		workersLeft = 0;
+	int workersInSystem = 0;
 
-	}
-	else
-	{
-		//workerAmount (-n) is greater than or equal to  WorkerSimLimit (-s), so launch (-s)  amount of workers	
-		WorkerLauncher(workerSimLimit, processTable, OsClock);	
+	RunSystemClock(OsClock, timeInterval);
 
-		//subtract simultanoues limit from amount of workers (n) to get amount of workers left to launch
-		workersLeft = workerAmount - workerSimLimit;
+	int timeToLaunchNxtWorkerSec = OsClock->seconds;
+	int timeToLaunchNxtWorkerNano = OsClock->nanoseconds;
 
-	}
+	int timeToOutputSec = 0;
+	int timeToOutputNano = 0;
+	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval, &timeToOutputSec, &timeToOutputNano);
 
 	//keep looping until all workers (-n) have finished working
-	while(workersComplete !=  workerAmount)
+	while(workersComplete != workerAmount)
+	{
+		
+     if(workersLeftToLaunch != 0)
+     {
+	if(workersInSystem <= workerSimLimit)
 	{	
-		//increment clock
-		RunSystemClock(OsClock);
+     	     if(CanLaunchWorker(OsClock->seconds, OsClock->nanoseconds, timeToLaunchNxtWorkerSec, timeToLaunchNxtWorkerNano) == 1)
+	{
+
+       		WorkerLauncher(1, processTable, OsClock);
+
+	 workersLeftToLaunch--;
+
+ 	 workersInSystem++;
+	printf("POST: %d %d %d\n", workersComplete, workersLeftToLaunch, workersInSystem);	
+
+	 RunSystemClock(OsClock, 500000);
+		 
+	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval, &timeToLaunchNxtWorkerSec, &timeToLaunchNxtWorkerNano);
+	
+	}
+	}
+     }		
+		
+	
 		//if 1/2 second passed, print process table
-		if(HasHalfSecPassed(OsClock->nanoseconds) == 0)
+		if(HasHalfSecPassed(OsClock->seconds,OsClock->nanoseconds, timeToOutputSec, timeToOutputNano) == 1)
 		{
+			RunSystemClock(OsClock, 500000);
 			PrintProcessTable(processTable, OsClock->seconds, OsClock->nanoseconds);
+	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval, &timeToOutputSec, &timeToOutputNano);
 		}
 		//get pid of next worker in pcb table
 		nxtWorkerToMsg = GetNxtWorkerToMsg(processTable, &nxtWorkerIndex);
-
+		
 		//if pid of next worker to message (nxtWorkerToMsg) is not zero send a message
 		if(nxtWorkerToMsg != 0)
 		{	
+	printf("%d\n", nxtWorkerToMsg);
+
+			UpdateWorkerStateInProcessTable(processTable, nxtWorkerToMsg, STATE_RUNNING);
 
 			//holds index value of next worker os will message for the sake of logging. (so we can saay for example OSS: Senfing message to worker 'x')
 			int workerIndexNum = GetWorkerIndexFromProcessTable(processTable, nxtWorkerToMsg);			
-			//log the fact that os is sending a message to specific worker
-			LogMessage(&logger,"Sending", workerIndexNum, nxtWorkerToMsg, OsClock->seconds, OsClock->nanoseconds);
+			
 			//send and recieve message to specific worker. returns a integer sent from the work about its status 
-			int statusState = SendAndRecieveStatusMsg(msqid, nxtWorkerToMsg);
-			//log the fact that os recieved a response message from specific worker
-			LogMessage(&logger,"Recieving", workerIndexNum, nxtWorkerToMsg, OsClock->seconds, OsClock->nanoseconds);
+			msgbuffer msg = SendAndRecieveScheduleMsg(msqid, nxtWorkerToMsg);
+		
+			int timeResults = msg.timeslice;
+			
 			//if statusState is 0, then worker is gonna terminate
-			if(statusState < 0)
+			if(timeResults < 0)
 			{
 				//log fact that worker is terminating
 				LogMessage(&logger,"Terminating", workerIndexNum, nxtWorkerToMsg,0,0);	
@@ -387,21 +414,51 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int workerTimeLimit, cha
 				workersComplete++;
 				//worker no longer occupied
 				UpdateWorkerStateInProcessTable(processTable, WorkerFinishedId, STATE_TERMINATED);
+			
+				workersInSystem--;
 
-				if(workersLeft != 0)
-				{ //if we are allowed to, launch another worker
-					WorkerLauncher(1,processTable,OsClock);
-					workersLeft--;
-				}
+			       printf("Term %d\n",WorkerFinishedId);
 
 			}
-		}	
+			else if(timeResults >= 0 && timeResults < SCHEDULE_TIME)
+			{
+			 UpdateWorkerStateInProcessTable(processTable, nxtWorkerToMsg, STATE_READY);
 
+			}
+			else
+			{
+			 UpdateWorkerStateInProcessTable(processTable, nxtWorkerToMsg, STATE_READY);
+
+			}
+			RunSystemClock(OsClock,timeResults);			
+
+		}	
+		RunSystemClock(OsClock,SCHEDULE_TIME);//REMOVCE LATER
 	}
 	//relesase external resources (message queue and log file)
 	DestructMsgQueue(msqid);
 	fclose(logger);
 
+}
+int CanLaunchWorker(int currentSecond,int currentNano,int LaunchTimeSec,int LaunchTimeNano)
+{
+ if(LaunchTimeSec <= currentSecond && LaunchTimeNano <= currentNano)
+ {
+ return 1;
+ }	 
+ return 0;
+}
+void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano, int* eventSec, int* eventNano)
+{
+	if(currentNano + timeIntervalNano >= MAX_NANOSECOND)
+	{
+	*(eventNano) = (currentNano + timeIntervalNano) - MAX_NANOSECOND;
+	*(eventSec) = *(eventSec) + 1;
+	}
+	else
+	{
+	*(eventNano) = (currentNano + timeIntervalNano);
+	}
 }
 
 void WorkerLauncher(int simLimit, struct PCB table[], struct Sys_Time* clock)
@@ -463,13 +520,13 @@ int AwaitWorker(pid_t worker_Id)
 	return pid;
 }
 
-int HasHalfSecPassed(int nanoseconds)
+int HasHalfSecPassed(int currentSec, int currentNano, int halfSecMark, int halfNanoMark)
 {//return 0, aka true if 1/2 second has passed
-	if(nanoseconds == 500000000 || nanoseconds == 0)
+	if(halfSecMark <= currentSec && halfNanoMark <= currentNano)
 	{
-		return 0;
+		return 1;
 	}	
-	return 1;
+	return 0;
 }
 int GetWorkerIndexFromProcessTable(struct PCB table[], pid_t workerId)
 {//find the index (0 - 19) of worker with pid passed in params using table
@@ -495,7 +552,7 @@ void AddWorkerToProcessTable(struct PCB table[], pid_t workerId, int secondsCrea
 			table[i].pid = workerId;
 			table[i].startSeconds = secondsCreated;
 			table[i].startNano = nanosecondsCreated;
-			table[i].state = STATE_RUNNING;
+			table[i].state = STATE_READY;
 			//break out of loop, prevents assiginged this worker to every empty row
 			break;
 		}
@@ -522,6 +579,10 @@ void BuildProcessTable(struct PCB table[])
 		table[i].state = 0;
 		table[i].startSeconds = 0;
 		table[i].startNano = 0;
+		table[i].serviceTimeSeconds = 0;
+		table[i].serviceTimeNano = 0;
+		table[i].eventWaitSec = 0;
+		table[i].eventWaitNano = 0;
 	}	
 
 }	

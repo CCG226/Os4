@@ -59,6 +59,7 @@ void DisposeAccessToShm(struct Sys_Time* clock)
 //workers console print task
 void TaskHandler()
 {
+	printf("SStarting %d\n", getpid());
 	int msqid = AccessMsgQueue();
 	//get parent and worker ids to print
 	pid_t os_id = getppid();
@@ -111,16 +112,16 @@ int SelectTask()
 	
 int option = (rand() % 100) + 1;
 
-if(option > 0 && option <= 5)
-{//5% chance to run and terminate
+if(option > 0 && option <= 2)
+{//2% chance to run and terminate
 return 0;
 }
-else if(option > 5 && option <= 15)
-{//10% chance to run and need external resource
+else if(option > 2 && option <= 5)
+{//3% chance to run and need external resource
 return 1;
 }
 else
-{//90% to run fully
+{//95% to run fully
 return 2;
 }
 
