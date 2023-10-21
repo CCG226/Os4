@@ -81,7 +81,7 @@ void TaskHandler()
 		int timeslice = AwaitOsRequestForPermissionsToRunTask(msqid, &msg);
 		int task = SelectTask();
 		int timeWorkerRan = 0;
-		int eventWaitTime = 0;
+		double eventWaitTime = 0;
 		if(task == 0)
 		{
 		 timeWorkerRan = TaskRunAndTerminate(timeslice);
@@ -91,12 +91,15 @@ void TaskHandler()
 		{
 		timeWorkerRan = TaskRunAndGetExternalResource(timeslice);
 		eventWaitTime = GenerateEventWaitTime();
+
+		
+
 		}
 		else
 		{
 		timeWorkerRan = TaskRun(timeslice);
 		}	
-		printf("%d %d %d\n", timeWorkerRan, eventWaitTime, task);
+		printf("%d %f %d\n", timeWorkerRan, eventWaitTime, task);
 		//send status varable indicating status of worker back to os
 		SendResponseMsg(msqid, &msg, timeWorkerRan, eventWaitTime);
 		
@@ -174,12 +177,13 @@ if(msgrcv(msqid, msg, sizeof(msgbuffer), getpid(), 0) == -1)
 	//return msg->timeslice;
 	return msg->timeslice;
 }
-void SendResponseMsg(int msqid, msgbuffer *msg, int timeRan, int eventWaitTime)
+void SendResponseMsg(int msqid, msgbuffer *msg, int timeRan, double eventWaitTime)
 {//send status update via integer value Data about if this worker is gonna terminate
 	//status == 0 if worker is gonna terminate
 	msg->timeslice = timeRan;
 	msg->mtype = 1;
 	msg->eventWaitTime = eventWaitTime;
+
 	//send message back to os
 	if(msgsnd(msqid, msg, sizeof(msgbuffer)-sizeof(long), 0) == -1) {
 		perror("Failed To Generate Response Message Back To Os.\n");

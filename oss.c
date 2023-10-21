@@ -278,39 +278,81 @@ int ValidateInput(int workerAmount, int workerSimLimit, int timeInterval, char* 
 	return isValid;
 
 }
-pid_t GetNxtWorkerToMsg(struct PCB table[], int* curIndex)
-{	//store pid of next worker to message in the os system
-	pid_t nxtWorker = 0;	
-	//iterate through the table starting at curIndex position 
-	//to find next running worker to message 
-	for(int i = 0; i < TABLE_SIZE; i++)
-	{       //iterate to next worker on pcb table
-		*(curIndex) = *(curIndex) + 1;
-		//if we reach the end of the table reset curIndex to first position on table
-		if(*(curIndex) == TABLE_SIZE)
-		{
-			*(curIndex) = 0;
+void RatioCompiler(struct PCB table[], double ratios[], struct Sys_Time* Clock)
+{
+	for(int i = 0; i < TABLE_SIZE;i++)
+	{
+	 int timeWorkerInSysSec = Clock->seconds - table[i].startSeconds;
+	 int timeWorkerInSysNano = Clock->nanoseconds - table[i].startNano;
+	 if(timeWorkerInSysSec == 0 && timeWorkerInSysNano == 0)
+	 {
+	 ratios[i] = 0;
+	 }
+	 else
+	 {
+	 double NanoSecToSecTimeInSys = (double) timeWorkerInSysNano / MAX_NANOSECOND;
+	 double NanoSecToSecTimeServiced = (double) table[i].serviceTimeNano / MAX_NANOSECOND;
 
-		}
+	 double RealTimeWorkerInSys = timeWorkerInSysSec + NanoSecToSecTimeInSys;
+	 double RealTimeWorkerServiced = table[i].serviceTimeSeconds + NanoSecToSecTimeServiced;
 
-		if(table[*(curIndex)].state == STATE_READY)
-		{//if we find a running worker on the table assign ints pid to local var and escape loop
-			nxtWorker = table[*(curIndex)].pid;
-
-			break;
-
-		}
-
+	 ratios[i] = RealTimeWorkerServiced / RealTimeWorkerInSys;
+	
+	 }
+	
 	}
-	return nxtWorker;
+}
+void WakeUpProcess(struct PCB table[], struct Sys_Time* Clock)
+{
+
+for(int i = 0; i < TABLE_SIZE;i++)
+{
+if(table[i].state == STATE_BLOCKED)
+{
+if(table[i].eventWaitSec <= Clock->seconds && table[i].eventWaitNano <= Clock->nanoseconds)
+{
+table[i].state = STATE_READY;
+table[i].eventWaitNano = 0;
+table[i].eventWaitSec = 0;
+printf("unblocked: %d\n", table[i].pid);
+}
 
 }
-void LogMessage(FILE** logger,const char* msgType,int workerIndex,pid_t workerId,int curSec,int curNano)
+
+}
+
+}
+int ReadyWorkerScheduler(struct PCB table[], struct Sys_Time* Clock)
+{
+	double ratioList[20];
+ RatioCompiler(table, ratioList, Clock);
+ double LowestRatio = -1;
+ int HighestPriorityWorker = 0;
+
+for(int i = 0; i < TABLE_SIZE;i++)
+{
+if(table[i].state == STATE_READY)
+{
+if(LowestRatio == -1 || ratioList[i] < LowestRatio)
+{
+LowestRatio = ratioList[i];
+HighestPriorityWorker = table[i].pid;
+}
+
+}
+}
+
+ return HighestPriorityWorker;
+
+
+}
+
+void LogMessage(FILE** logger, int msgType, int workerId,...)
 {
 	//logs status message to logfile
 
 	char buffer[100];	
-	if(strcmp(msgType, "Terminating") == 0)
+	if(msgType == 0)
 	{//if msgType equals Terminating then output that this work is about to terminate
 		sprintf(buffer, "OSS: Worker %d PID %d is planning to terminate.\n", workerIndex, workerId);
 	}
@@ -328,11 +370,9 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 	FILE *logger = fopen(logFile, "w");
 	//get id of message queue after creating ti
 	int msqid = ConstructMsgQueue();
-	//tracks pcb table index of last selected worker to message, after messaging that worker we can use this index to remeber where are in the pcb table and find the mext worker to message on the pcb table, thus avoiding the os repeatedly sending a message to the smae worker
-	int nxtWorkerIndex = 0;
-	//holds pid of next worker to message from os, os will send and recieve a status response from this worker 
-	pid_t nxtWorkerToMsg = 0;
 
+	//holds pid of next worker to message from os, os will send and recieve a status response from this worker 
+	int nxtWorkerToSchedule = 0;
 	//tracks amount of workers finished with task
 	int workersComplete = 0;
 
@@ -349,7 +389,7 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 
 	int timeToOutputSec = 0;
 	int timeToOutputNano = 0;
-	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval, &timeToOutputSec, &timeToOutputNano);
+	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,HALF_SEC,0, &timeToOutputSec, &timeToOutputNano);
 
 	//keep looping until all workers (-n) have finished working
 	while(workersComplete != workerAmount)
@@ -367,11 +407,10 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 	 workersLeftToLaunch--;
 
  	 workersInSystem++;
-	printf("POST: %d %d %d\n", workersComplete, workersLeftToLaunch, workersInSystem);	
 
 	 RunSystemClock(OsClock, 500000);
 		 
-	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval, &timeToLaunchNxtWorkerSec, &timeToLaunchNxtWorkerNano);
+	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval,0, &timeToLaunchNxtWorkerSec, &timeToLaunchNxtWorkerNano);
 	
 	}
 	}
@@ -383,23 +422,21 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 		{
 			RunSystemClock(OsClock, 500000);
 			PrintProcessTable(processTable, OsClock->seconds, OsClock->nanoseconds);
-	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval, &timeToOutputSec, &timeToOutputNano);
+	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,HALF_SEC,0, &timeToOutputSec, &timeToOutputNano);
 		}
-		//get pid of next worker in pcb table
-		nxtWorkerToMsg = GetNxtWorkerToMsg(processTable, &nxtWorkerIndex);
-		
+			
+		WakeUpProcess(processTable, OsClock);
+		 nxtWorkerToSchedule = ReadyWorkerScheduler(processTable,OsClock);
+
 		//if pid of next worker to message (nxtWorkerToMsg) is not zero send a message
-		if(nxtWorkerToMsg != 0)
+		if(nxtWorkerToSchedule != 0)
 		{	
-	printf("%d\n", nxtWorkerToMsg);
 
-			UpdateWorkerStateInProcessTable(processTable, nxtWorkerToMsg, STATE_RUNNING);
+			UpdateWorkerStateInProcessTable(processTable, nxtWorkerToSchedule, STATE_RUNNING);
 
-			//holds index value of next worker os will message for the sake of logging. (so we can saay for example OSS: Senfing message to worker 'x')
-			int workerIndexNum = GetWorkerIndexFromProcessTable(processTable, nxtWorkerToMsg);			
 			
 			//send and recieve message to specific worker. returns a integer sent from the work about its status 
-			msgbuffer msg = SendAndRecieveScheduleMsg(msqid, nxtWorkerToMsg);
+			msgbuffer msg = SendAndRecieveScheduleMsg(msqid, nxtWorkerToSchedule);
 		
 			int timeResults = msg.timeslice;
 			
@@ -407,9 +444,9 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 			if(timeResults < 0)
 			{
 				//log fact that worker is terminating
-				LogMessage(&logger,"Terminating", workerIndexNum, nxtWorkerToMsg,0,0);	
+				LogMessage(&logger,"Terminating", 0, nxtWorkerToSchedule,0,0);	
 				//await that worker toterminate and get its pid
-				int WorkerFinishedId = AwaitWorker(nxtWorkerToMsg);
+				int WorkerFinishedId = AwaitWorker(nxtWorkerToSchedule);
 				//another worker is done
 				workersComplete++;
 				//worker no longer occupied
@@ -417,19 +454,19 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 			
 				workersInSystem--;
 
-			       printf("Term %d\n",WorkerFinishedId);
-
 			}
 			else if(timeResults >= 0 && timeResults < SCHEDULE_TIME)
 			{
-			 UpdateWorkerStateInProcessTable(processTable, nxtWorkerToMsg, STATE_READY);
-
+			 UpdateWorkerStateInProcessTable(processTable, nxtWorkerToSchedule, STATE_BLOCKED);
+			
+			 StoreWorkerEventWaitTime(processTable, nxtWorkerToSchedule, msg.eventWaitTime, OsClock);
 			}
 			else
 			{
-			 UpdateWorkerStateInProcessTable(processTable, nxtWorkerToMsg, STATE_READY);
+			 UpdateWorkerStateInProcessTable(processTable, nxtWorkerToSchedule, STATE_READY);
 
 			}
+			StoreWorkerServiceTime(processTable, nxtWorkerToSchedule,timeResults);
 			RunSystemClock(OsClock,timeResults);			
 
 		}	
@@ -448,8 +485,10 @@ int CanLaunchWorker(int currentSecond,int currentNano,int LaunchTimeSec,int Laun
  }	 
  return 0;
 }
-void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano, int* eventSec, int* eventNano)
+
+void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano,int timeIntervalSec, int* eventSec, int* eventNano)
 {
+	*(eventSec) = currentSecond + timeIntervalSec;
 	if(currentNano + timeIntervalNano >= MAX_NANOSECOND)
 	{
 	*(eventNano) = (currentNano + timeIntervalNano) - MAX_NANOSECOND;
@@ -460,7 +499,6 @@ void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano,
 	*(eventNano) = (currentNano + timeIntervalNano);
 	}
 }
-
 void WorkerLauncher(int simLimit, struct PCB table[], struct Sys_Time* clock)
 {
 	//stores random time argument values workers will work	
@@ -528,6 +566,50 @@ int HasHalfSecPassed(int currentSec, int currentNano, int halfSecMark, int halfN
 	}	
 	return 0;
 }
+double getDataAfterDecimal(double data)
+{
+return (data - (int)data);
+}
+void StoreWorkerEventWaitTime(struct PCB table[], pid_t workerId, double eventTime, struct Sys_Time* clock)
+{
+int TimeToWaitNano = getDataAfterDecimal(eventTime) * MAX_NANOSECOND;
+int TimeToWaitSec = (int) eventTime;
+int EventTimeNano = 0;
+int EventTimeSec = 0;
+GenerateTimeToEvent(clock->seconds, clock->nanoseconds, TimeToWaitNano, TimeToWaitSec, &EventTimeSec, &EventTimeNano);
+for(int i = 0; i < TABLE_SIZE;i++)
+{
+if(table[i].pid == workerId)
+{
+table[i].eventWaitSec = EventTimeSec;
+table[i].eventWaitNano = EventTimeNano;
+printf("event: id: %d clock: %d %d timeWait %d %d eventTimeAt %d %d param: %f\n",workerId,clock->seconds,clock->nanoseconds,TimeToWaitNano, TimeToWaitSec, EventTimeSec, EventTimeNano, eventTime);
+}
+}
+}
+void StoreWorkerServiceTime(struct PCB table[], pid_t workerId, int timeWorkingNano)
+{
+if(timeWorkingNano < 0)
+{
+timeWorkingNano = timeWorkingNano * -1;
+}
+for(int i = 0; i < TABLE_SIZE;i++)
+{
+if(table[i].pid == workerId)
+{
+ if(table[i].serviceTimeNano + timeWorkingNano >= MAX_NANOSECOND)
+ {
+ table[i].serviceTimeNano = (table[i].serviceTimeNano + timeWorkingNano) - MAX_NANOSECOND;
+ table[i].serviceTimeSeconds = table[i].serviceTimeSeconds + 1; 
+ }
+ else
+ {
+ table[i].serviceTimeNano = (table[i].serviceTimeNano + timeWorkingNano); 
+ }
+}
+}
+
+}
 int GetWorkerIndexFromProcessTable(struct PCB table[], pid_t workerId)
 {//find the index (0 - 19) of worker with pid passed in params using table
 	for(int i = 0; i < TABLE_SIZE;i++)
@@ -593,10 +675,10 @@ void PrintProcessTable(struct PCB processTable[],int curTimeSeconds, int curTime
 	int os_id = getpid();	
 	printf("\nOSS PID:%d SysClockS: %d SysclockNano: %d\n",os_id, curTimeSeconds, curTimeNanoseconds);
 	printf("Process Table:\n");
-	printf("Entry State  PID          StartS  StartN\n");
+	printf("Entry State  PID          StartS      StartN     ServiceS    ServiceN     EventS    EventN\n");
 	for(int i = 0; i < TABLE_SIZE; i++)
 	{
-		printf("%d      %d        %d          %d        %d\n", i, processTable[i].state, processTable[i].pid, processTable[i].startSeconds, processTable[i].startNano);
+		printf("%d      %d        %d          %d        %d       %d        %d      %d        %d\n", i, processTable[i].state, processTable[i].pid, processTable[i].startSeconds, processTable[i].startNano, processTable[i].serviceTimeSeconds, processTable[i].serviceTimeNano, processTable[i].eventWaitSec, processTable[i].eventWaitNano);
 	}
 }
 

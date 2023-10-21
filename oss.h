@@ -84,14 +84,26 @@ void DestructMsgQueue(int msqid);
 //sends request to specific worker using workers pid via message queue
 //and recieves a response about workers status to see if worker is done or not
 msgbuffer SendAndRecieveScheduleMsg(int msqid, pid_t worker_id);
+
+void RatioCompiler(struct PCB table[], double ratios[], struct Sys_Time* Clock);
+
+int ReadyWorkerScheduler(struct PCB table[], struct Sys_Time* Clock);
+
+double getDataAfterDecimal(double data);
+
+void StoreWorkerEventWaitTime(struct PCB table[], pid_t workerId, double eventTime, struct Sys_Time* clock);
+
+void StoreWorkerServiceTime(struct PCB table[], pid_t workerId, int timeWorkingNano);
 //determines next worket os will message in the system
 //using the process table and a index value passed by reference to track previous worker messaged
 pid_t GetNxtWorkerToMsg(struct PCB processTable[], int* curIndex);
 
 int CanLaunchWorker(int currentSecond,int currentNano,int LaunchTimeSec,int LaunchTimeNano);
 
-void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano, int* eventSec, int* eventNano);
+void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano,int timeIntervalSec, int* eventSec, int* eventNano);
 //proccess table state values, 1 means process is running, 0 means process is terminated
+
+void WakeUpProcess(struct PCB table[], struct Sys_Time* Clock);
 
 const int STATE_BLOCKED = 3;
 
@@ -102,6 +114,8 @@ const int STATE_RUNNING = 1;
 const int STATE_TERMINATED = 0;
 
 const int TABLE_SIZE = 20;
+
+const int HALF_SEC = 500000000;
 
 const int MAX_NANOSECOND = 1000000000;
 

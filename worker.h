@@ -34,7 +34,7 @@ int AccessMsgQueue();
 int AwaitOsRequestForPermissionsToRunTask(int msqid, msgbuffer *msg);
 
 //if worker must terminate it sends a 0 back to os, else its still working and sends a 1 back to os
-void SendResponseMsg(int msqid, msgbuffer *msg, int timeRan, int eventWaitTime);
+void SendResponseMsg(int msqid, msgbuffer *msg, int timeRan, double eventWaitTime);
 
 const int RUNNING = 1;
 const int TERMINATING = 0;
