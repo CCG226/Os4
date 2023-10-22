@@ -15,7 +15,7 @@
 
 int main(int argc, char** argv)
 {
-	srand(time(NULL));
+	srand(getpid());
 	
 
 	TaskHandler();//do worker task
@@ -59,7 +59,7 @@ void DisposeAccessToShm(struct Sys_Time* clock)
 //workers console print task
 void TaskHandler()
 {
-	printf("SStarting %d\n", getpid());
+	
 	int msqid = AccessMsgQueue();
 	//get parent and worker ids to print
 	pid_t os_id = getppid();
@@ -99,7 +99,7 @@ void TaskHandler()
 		{
 		timeWorkerRan = TaskRun(timeslice);
 		}	
-		printf("%d %f %d\n", timeWorkerRan, eventWaitTime, task);
+	
 		//send status varable indicating status of worker back to os
 		SendResponseMsg(msqid, &msg, timeWorkerRan, eventWaitTime);
 		

@@ -50,8 +50,7 @@ void WorkerHandler(int workerAmount, int workerSimLimit, int timeInterval,char* 
 //if msgType is 'Terminating' print message about worker going to terminate soon
 //if msgType is 'Sending' print message about worker sending status message to os
 //if msgType is 'Recieving' print message about os sending request for status update to particular worker
-void LogMessage(FILE** logger,const char* msgType,int workerIndex,pid_t workerId,int curSec,int curNano);
-
+int LogMessage(FILE* logger, const char* format,...);
 //nonblocking await to see if a worker is done
 //return 0 if no workers done
 //returns id of worker done if a worker is done
@@ -59,7 +58,7 @@ int AwaitWorker(pid_t worker_Id);
 
 //launches worker processes
 //amount launched at once is based on simLimit, adds workers id & start clock time  to process table post launch, randomly generates time to work with timeLimit 
-void WorkerLauncher(int simLimit, struct PCB table[], struct Sys_Time* clock);
+void WorkerLauncher(int amount, struct PCB table[], struct Sys_Time* clock, FILE* logger);
 //starts alarm clock for 60 seconds
 void Begin_OS_LifeCycle();
 //kills os after 60 second event signal is triggered
@@ -87,7 +86,7 @@ msgbuffer SendAndRecieveScheduleMsg(int msqid, pid_t worker_id);
 
 void RatioCompiler(struct PCB table[], double ratios[], struct Sys_Time* Clock);
 
-int ReadyWorkerScheduler(struct PCB table[], struct Sys_Time* Clock);
+int ReadyWorkerScheduler(struct PCB table[], struct Sys_Time* Clock, FILE* logger);
 
 double getDataAfterDecimal(double data);
 
@@ -103,7 +102,21 @@ int CanLaunchWorker(int currentSecond,int currentNano,int LaunchTimeSec,int Laun
 void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano,int timeIntervalSec, int* eventSec, int* eventNano);
 //proccess table state values, 1 means process is running, 0 means process is terminated
 
-void WakeUpProcess(struct PCB table[], struct Sys_Time* Clock);
+int WakeUpProcess(struct PCB table[], struct Sys_Time* Clock, FILE* logger);
+
+double TimeProcessWaited(struct Sys_Time* clock, int id, struct PCB table[]);
+
+double GetWorkerTimeSpentWorking(struct PCB table[]);
+
+void Report(double totalWaitTimeOfAllWorkers,double totalTimeSpentBlocked, int amountBlocked, int workerAmount, struct PCB table[], struct Sys_Time* clock);
+
+double AvgCpuUtilization(double timeRunningProccesses, double totalSysTime);
+
+double IdleTime(double totalSysTime, double timeRunningProccesses);
+
+double AvgWaitTimeWhileBlocked(double totalTimeBlocked,int amountBlocked);
+
+double AvgWaitTimeToRun(double totalWaitTimeInReady,int amountOfWorkers);
 
 const int STATE_BLOCKED = 3;
 
