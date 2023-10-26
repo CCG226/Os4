@@ -61,10 +61,7 @@ void TaskHandler()
 {
 	
 	int msqid = AccessMsgQueue();
-	//get parent and worker ids to print
-	pid_t os_id = getppid();
-	pid_t worker_id = getpid();
-	
+		
 	struct Sys_Time* Clock = AccessSystemTime();
 
 	//determines of worker can keep working, if 0 worker must terminate
@@ -77,36 +74,41 @@ void TaskHandler()
 	{ 
 
 
-		//wait for os to send a request for status information on wheather or not this worker is done working
+		//wait for os to send a request with permissions to run and the amount of time we can run
 		int timeslice = AwaitOsRequestForPermissionsToRunTask(msqid, &msg);
+		//pick a task to do
 		int task = SelectTask();
+	     //stores time worker actually ran of timeslice
 		int timeWorkerRan = 0;
+		//if worker needs to access external resource, store amount of time wokre must wait to access resource
 		double eventWaitTime = 0;
+
 		if(task == 0)
-		{
+		{//if task is 0, worker runs a bit and terminated
 		 timeWorkerRan = TaskRunAndTerminate(timeslice);
+		 //worker will end operations
 		 status = TERMINATING;
 		}
 		else if(task == 1)
 		{
+			//if task is 1, worker runs a bit and needs to access external resoruce
 		timeWorkerRan = TaskRunAndGetExternalResource(timeslice);
+		//determine time worker must wait for external resource 
 		eventWaitTime = GenerateEventWaitTime();
 
 		
 
 		}
 		else
-		{
+		{//worker runs its entire timeslice normally
 		timeWorkerRan = TaskRun(timeslice);
 		}	
 	
-		//send status varable indicating status of worker back to os
+		//send smsg to os indicating what it did, the time it ran for, and possibly the time it must be blocked for it it reqeusted external resoruce
 		SendResponseMsg(msqid, &msg, timeWorkerRan, eventWaitTime);
 		
 	}
-	//worker saying its done
-	printf("WORKER PID: %d PPID: %d SysClockS: %d SysClockNano: %d TermTimeS: %d TermTimeNano: %d \n--Terminating  \n",worker_id,os_id,Clock->seconds,Clock->nanoseconds, 0,0);
-	//detach workers read only system clock from shared memory
+	
 	DisposeAccessToShm(Clock);
 
 }
@@ -131,17 +133,18 @@ return 2;
 }
 
 int TaskRun(int timeslice)
-{
+{//ran entire timeslice
   return timeslice;
 }
 int TaskRunAndTerminate(int timeslice)
-{
+{//ran random value  0 to timeslice value and terminated
 int timeRanBeforeTerm = (rand() % timeslice) + 1;
-
+//return negative number os will use to determine worker is terminated
 return timeRanBeforeTerm * -1;
 }
 int TaskRunAndGetExternalResource(int timeslice)
 {
+//worker ran random percentage of timeslice before external resoruce interrupt	
 int percentageOfTimeSliceUsed = (rand() % 100);
 
 double percentageUsedAsDecimal = (double)percentageOfTimeSliceUsed / 100;
@@ -153,7 +156,7 @@ return timeSliceUsed;
 }
 double GenerateEventWaitTime()
 {
-
+//determine random amount of time [0,5] seconds + [0,1000] milliseconds workrer must wait in blocked queue before accessing external resource
 int eventWaitSeconds = (rand() % 6);
 
 int eventWaitMilliseconds = (rand() % 1001);
@@ -165,8 +168,7 @@ return (eventWaitSeconds + convertMilliToSecs);
 }
 int AwaitOsRequestForPermissionsToRunTask(int msqid, msgbuffer *msg)
 {
-	//blocking wait for message from os requesting status info
-	//os communicates to this worker via its pid (4th param)	
+	//wait for os to send message with amount of time we can run for
 
 if(msgrcv(msqid, msg, sizeof(msgbuffer), getpid(), 0) == -1)
 	{
@@ -174,12 +176,11 @@ if(msgrcv(msqid, msg, sizeof(msgbuffer), getpid(), 0) == -1)
 		fprintf(stderr, "errno: %d\n", errno);
 		exit(1);
 	}
-	//return msg->timeslice;
+	//return timeslice
 	return msg->timeslice;
 }
 void SendResponseMsg(int msqid, msgbuffer *msg, int timeRan, double eventWaitTime)
-{//send status update via integer value Data about if this worker is gonna terminate
-	//status == 0 if worker is gonna terminate
+{//send amount of time worker ran and  amount of time worker wait to access external resource (if it doesnt, eventWaitTime = 0)
 	msg->timeslice = timeRan;
 	msg->mtype = 1;
 	msg->eventWaitTime = eventWaitTime;
