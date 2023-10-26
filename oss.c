@@ -75,7 +75,7 @@ int main(int argc, char** argv)
 
 	//pass workerAmount (-n), simultaneousLimit (-s),timeLimit(-t) by reference and assigns coresponding argument values from the command line to them
 	ArgumentParser(argc, argv,&workerAmount, &simultaneousLimit, &timeInterval, &logFileName);
-	
+
 	//'starts' aka sets up shared memory system clock and assigns default values for clock 
 	shm_ClockId = StartSystemClock(&OS_Clock);
 
@@ -175,9 +175,9 @@ void RunSystemClock(struct Sys_Time *Clock, int incRate) {
 
 	if(incRate < 0)
 	{
-	incRate = incRate * -1;
+		incRate = incRate * -1;
 	}
-//clock iteration based on incRate value, if negative (worker terminating time slice return) change value to positive
+	//clock iteration based on incRate value, if negative (worker terminating time slice return) change value to positive
 	Clock->rate = incRate;
 	//handles clock iteration / ticking
 	if((Clock->nanoseconds + Clock->rate) >= MAX_NANOSECOND)
@@ -186,9 +186,9 @@ void RunSystemClock(struct Sys_Time *Clock, int incRate) {
 		Clock->seconds = Clock->seconds + 1;
 	}
 	else {
-	Clock->nanoseconds = Clock->nanoseconds + Clock->rate;
+		Clock->nanoseconds = Clock->nanoseconds + Clock->rate;
 	}
-	
+
 
 }
 
@@ -287,107 +287,107 @@ void RatioCompiler(struct PCB table[], double ratios[], struct Sys_Time* Clock)
 	///worker ratio = time_serviced / time_spent_in_Sys;
 	for(int i = 0; i < TABLE_SIZE;i++)
 	{
-	 int timeWorkerInSysSec = Clock->seconds - table[i].startSeconds;
-	 int timeWorkerInSysNano = Clock->nanoseconds - table[i].startNano;
-	 if(timeWorkerInSysSec == 0 && timeWorkerInSysNano == 0)
-	 {
-	 ratios[i] = 0;
-	 }
-	 else
-	 {
-	 double NanoSecToSecTimeInSys = (double) timeWorkerInSysNano / MAX_NANOSECOND;
-	 double NanoSecToSecTimeServiced = (double) table[i].serviceTimeNano / MAX_NANOSECOND;
+		int timeWorkerInSysSec = Clock->seconds - table[i].startSeconds;
+		int timeWorkerInSysNano = Clock->nanoseconds - table[i].startNano;
+		if(timeWorkerInSysSec == 0 && timeWorkerInSysNano == 0)
+		{
+			ratios[i] = 0;
+		}
+		else
+		{
+			double NanoSecToSecTimeInSys = (double) timeWorkerInSysNano / MAX_NANOSECOND;
+			double NanoSecToSecTimeServiced = (double) table[i].serviceTimeNano / MAX_NANOSECOND;
 
-	 double RealTimeWorkerInSys = timeWorkerInSysSec + NanoSecToSecTimeInSys;
-	 double RealTimeWorkerServiced = table[i].serviceTimeSeconds + NanoSecToSecTimeServiced;
+			double RealTimeWorkerInSys = timeWorkerInSysSec + NanoSecToSecTimeInSys;
+			double RealTimeWorkerServiced = table[i].serviceTimeSeconds + NanoSecToSecTimeServiced;
 
-	 ratios[i] = RealTimeWorkerServiced / RealTimeWorkerInSys;
-	
-	 }
-	
+			ratios[i] = RealTimeWorkerServiced / RealTimeWorkerInSys;
+
+		}
+
 	}
 }
 int WakeUpProcess(struct PCB table[], struct Sys_Time* Clock, FILE* logger)
 {
-int amountWoken = 0;
-//wake up workers from block queue if event time passed
-for(int i = 0; i < TABLE_SIZE;i++)
-{
-if(table[i].state == STATE_BLOCKED)
-{
-if(table[i].eventWaitSec <= Clock->seconds && table[i].eventWaitNano <= Clock->nanoseconds)
-{
-amountWoken++;	
-table[i].state = STATE_READY;
-table[i].eventWaitNano = 0;
-table[i].eventWaitSec = 0;
-LogMessage(logger, "OSS: Unblocked Worker %d at time %d:%d. Worker now back to ready queue.\n",table[i].pid, Clock->seconds, Clock->nanoseconds); 
-}
+	int amountWoken = 0;
+	//wake up workers from block queue if event time passed
+	for(int i = 0; i < TABLE_SIZE;i++)
+	{
+		if(table[i].state == STATE_BLOCKED)
+		{
+			if(table[i].eventWaitSec <= Clock->seconds && table[i].eventWaitNano <= Clock->nanoseconds)
+			{
+				amountWoken++;	
+				table[i].state = STATE_READY;
+				table[i].eventWaitNano = 0;
+				table[i].eventWaitSec = 0;
+				LogMessage(logger, "OSS: Unblocked Worker %d at time %d:%d. Worker now back to ready queue.\n",table[i].pid, Clock->seconds, Clock->nanoseconds); 
+			}
 
-}
+		}
 
-}
-//return amount of workers removed from block queue
-return amountWoken;
+	}
+	//return amount of workers removed from block queue
+	return amountWoken;
 }
 int ReadyWorkerScheduler(struct PCB table[], struct Sys_Time* Clock, FILE* logger)
 {//calc ratio list
 	double ratioList[20];
- RatioCompiler(table, ratioList, Clock);
- 
- double LowestRatio = -1;
- int HighestPriorityWorker = 0;
-//if worker state is ready and if tthat worker has the lowest ratio, then that worker is to be scheduled next
-for(int i = 0; i < TABLE_SIZE;i++)
-{
+	RatioCompiler(table, ratioList, Clock);
 
-if(table[i].state == STATE_READY)
-{
-	
-if(LowestRatio == -1)
-{
- LogMessage(logger, "OSS: Ready queue prorities [");
+	double LowestRatio = -1;
+	int HighestPriorityWorker = 0;
+	//if worker state is ready and if tthat worker has the lowest ratio, then that worker is to be scheduled next
+	for(int i = 0; i < TABLE_SIZE;i++)
+	{
 
-}
-if(LowestRatio == -1 || ratioList[i] < LowestRatio)
-{
-LowestRatio = ratioList[i];
-HighestPriorityWorker = table[i].pid;
-}
-LogMessage(logger, "PID: %d ratio: %f,",table[i].pid, ratioList[i]);	
+		if(table[i].state == STATE_READY)
+		{
 
-}
-}
+			if(LowestRatio == -1)
+			{
+				LogMessage(logger, "OSS: Ready queue prorities [");
 
-if(LowestRatio != -1)
-{
-LogMessage(logger, "]\n");
+			}
+			if(LowestRatio == -1 || ratioList[i] < LowestRatio)
+			{
+				LowestRatio = ratioList[i];
+				HighestPriorityWorker = table[i].pid;
+			}
+			LogMessage(logger, "PID: %d ratio: %f,",table[i].pid, ratioList[i]);	
 
-LogMessage(logger, "OSS: Dispatching process with PID %d priority %f from ready queue at time %d:%d\n",HighestPriorityWorker, LowestRatio, Clock->seconds, Clock->nanoseconds);
-}
-return HighestPriorityWorker;
+		}
+	}
+
+	if(LowestRatio != -1)
+	{
+		LogMessage(logger, "]\n");
+
+		LogMessage(logger, "OSS: Dispatching process with PID %d priority %f from ready queue at time %d:%d\n",HighestPriorityWorker, LowestRatio, Clock->seconds, Clock->nanoseconds);
+	}
+	return HighestPriorityWorker;
 
 
 }
 
 int LogMessage(FILE* logger, const char* format,...)
 {//logging to file
-static int lineCount = 0;
-lineCount++;
-if(lineCount > 10000)
-{
-return 1;
-}
+	static int lineCount = 0;
+	lineCount++;
+	if(lineCount > 10000)
+	{
+		return 1;
+	}
 
-va_list args;
+	va_list args;
 
-va_start(args,format);
+	va_start(args,format);
 
-vfprintf(logger,format,args);
+	vfprintf(logger,format,args);
 
-va_end(args);
+	va_end(args);
 
-return 0;
+	return 0;
 }
 void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* logFile, struct Sys_Time* OsClock, struct PCB processTable[])
 {	//access logfile
@@ -425,59 +425,59 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 	while(workersComplete != workerAmount)
 	{
 		//if thier are still workers left to launch
-     if(workersLeftToLaunch != 0)
-     {
-	     //if thier are less workers in the system the the allowed simultanous value of amount of workers that can run at once
-	if(workersInSystem <= workerSimLimit)
-	{	
-		//it timeInterval t has passed
-     	     if(CanLaunchWorker(OsClock->seconds, OsClock->nanoseconds, timeToLaunchNxtWorkerSec, timeToLaunchNxtWorkerNano) == 1)
-	{
-//laucnh new worker
-       		WorkerLauncher(1, processTable, OsClock, logger);
+		if(workersLeftToLaunch != 0)
+		{
+			//if thier are less workers in the system the the allowed simultanous value of amount of workers that can run at once
+			if(workersInSystem <= workerSimLimit)
+			{	
+				//it timeInterval t has passed
+				if(CanLaunchWorker(OsClock->seconds, OsClock->nanoseconds, timeToLaunchNxtWorkerSec, timeToLaunchNxtWorkerNano) == 1)
+				{
+					//laucnh new worker
+					WorkerLauncher(1, processTable, OsClock, logger);
 
-	 workersLeftToLaunch--;
+					workersLeftToLaunch--;
 
- 	 workersInSystem++;
-//run clock as luanching takes time
-	 RunSystemClock(OsClock, 500000);
-		 //determine nxt time to launch worker
-	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval,0, &timeToLaunchNxtWorkerSec, &timeToLaunchNxtWorkerNano);
-	
-	}
-	}
-     }		
-		
-	
+					workersInSystem++;
+					//run clock as luanching takes time
+					RunSystemClock(OsClock, 500000);
+					//determine nxt time to launch worker
+					GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,timeInterval,0, &timeToLaunchNxtWorkerSec, &timeToLaunchNxtWorkerNano);
+
+				}
+			}
+		}		
+
+
 		//if 1/2 second passed, print process table
 		if(HasHalfSecPassed(OsClock->seconds,OsClock->nanoseconds, timeToOutputSec, timeToOutputNano) == 1)
 		{
-			
+
 			PrintProcessTable(processTable, OsClock->seconds, OsClock->nanoseconds);
-	GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,HALF_SEC,0, &timeToOutputSec, &timeToOutputNano);
+			GenerateTimeToEvent(OsClock->seconds, OsClock->nanoseconds,HALF_SEC,0, &timeToOutputSec, &timeToOutputNano);
 		}
 		//see if any workers event time is up and can leave blocked queue and return amount of workers exiting blocked queue
 		int amountWoken = WakeUpProcess(processTable, OsClock, logger);
-	//run clock for depending on how many procceses had to be moved from blocked to ready
+		//run clock for depending on how many procceses had to be moved from blocked to ready
 		RunSystemClock(OsClock, 500000 * amountWoken);	
-	      //schedule nxt ready worker
+		//schedule nxt ready worker
 		nxtWorkerToSchedule = ReadyWorkerScheduler(processTable,OsClock, logger);
-//run clock for scheduling 
+		//run clock for scheduling 
 		RunSystemClock(OsClock, 500000);
 
 		//if pid of next worker to schedule is not zero 
 		if(nxtWorkerToSchedule != 0)
 		{	
-			
+
 			//secdule worker
 			UpdateWorkerStateInProcessTable(processTable, nxtWorkerToSchedule, STATE_RUNNING);
 
-			
+
 			//send and recieve message to specific worker. returns amount of time worker ran and possibly amount of time it must be blocked for
 			msgbuffer msg = SendAndRecieveScheduleMsg(msqid, nxtWorkerToSchedule);
-				//time worker ran
+			//time worker ran
 			int timeResults = msg.timeslice;
-			
+
 			//if results is negative , the worker ran for less then scheduled time and terminated
 			if(timeResults < 0)
 			{	
@@ -489,23 +489,23 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 				UpdateWorkerStateInProcessTable(processTable, WorkerFinishedId, STATE_TERMINATED);
 				//store amount of time worker spent not working 
 				totalWaitTimeOfAllWorkers = totalWaitTimeOfAllWorkers + TimeProcessWaited(OsClock, WorkerFinishedId, processTable);
-	
+
 				workersInSystem--;
 				LogMessage(logger, "OSS: Worker %d is terminating.\n", WorkerFinishedId, timeResults);
 			}
 			else if(timeResults >= 0 && timeResults < SCHEDULE_TIME)
 			{//if time less then schedule time and not negative, worker was interrupted to access external i/o
 				//block worker and store amount of time worker must wait in blocked
-			 UpdateWorkerStateInProcessTable(processTable, nxtWorkerToSchedule, STATE_BLOCKED);
-			 LogMessage(logger, "OSS: Worker %d is blocked for %f seconds\n", nxtWorkerToSchedule, msg.eventWaitTime);
-			StoreWorkerEventWaitTime(processTable, nxtWorkerToSchedule, msg.eventWaitTime, OsClock);
-			//update amount of workers blocked total and total time of workers being blocked
-			totalTimeSpentBlocked += msg.eventWaitTime;
-			amountOfWorkersBlocked++;
+				UpdateWorkerStateInProcessTable(processTable, nxtWorkerToSchedule, STATE_BLOCKED);
+				LogMessage(logger, "OSS: Worker %d is blocked for %f seconds\n", nxtWorkerToSchedule, msg.eventWaitTime);
+				StoreWorkerEventWaitTime(processTable, nxtWorkerToSchedule, msg.eventWaitTime, OsClock);
+				//update amount of workers blocked total and total time of workers being blocked
+				totalTimeSpentBlocked += msg.eventWaitTime;
+				amountOfWorkersBlocked++;
 			}
 			else
 			{//else worker ran full timeslice and goes back to ready queue
-			 UpdateWorkerStateInProcessTable(processTable, nxtWorkerToSchedule, STATE_READY);
+				UpdateWorkerStateInProcessTable(processTable, nxtWorkerToSchedule, STATE_READY);
 
 			}
 			//store amount of time serviced 
@@ -514,36 +514,36 @@ void WorkerHandler(int workerAmount, int workerSimLimit,int timeInterval, char* 
 			RunSystemClock(OsClock,timeResults);			
 
 		}	
-		
+
 	}
 	//relesase external resources (message queue and log file) and generate performance report 
-Report(totalWaitTimeOfAllWorkers,totalTimeSpentBlocked, amountOfWorkersBlocked,workerAmount, processTable, OsClock);
+	Report(totalWaitTimeOfAllWorkers,totalTimeSpentBlocked, amountOfWorkersBlocked,workerAmount, processTable, OsClock);
 	DestructMsgQueue(msqid);
 	fclose(logger);
 
 }
 double TimeProcessWaited(struct Sys_Time* clock, int id, struct PCB table[])
 {//calculates time worker spent waiting to be run
-int workerIndex = GetWorkerIndexFromProcessTable(table, id);
+	int workerIndex = GetWorkerIndexFromProcessTable(table, id);
 
-double timeTerminated = (clock->seconds + ((double) clock->nanoseconds / MAX_NANOSECOND));
+	double timeTerminated = (clock->seconds + ((double) clock->nanoseconds / MAX_NANOSECOND));
 
-double timeStarted = (table[workerIndex].startSeconds + ((double) table[workerIndex].startNano / MAX_NANOSECOND));
+	double timeStarted = (table[workerIndex].startSeconds + ((double) table[workerIndex].startNano / MAX_NANOSECOND));
 
-double timeServiced = (table[workerIndex].serviceTimeSeconds + ((double) table[workerIndex].serviceTimeNano /MAX_NANOSECOND));
+	double timeServiced = (table[workerIndex].serviceTimeSeconds + ((double) table[workerIndex].serviceTimeNano /MAX_NANOSECOND));
 
-double workerTimeInSys = timeTerminated - timeStarted;
+	double workerTimeInSys = timeTerminated - timeStarted;
 
-return (workerTimeInSys - timeServiced);	
+	return (workerTimeInSys - timeServiced);	
 
 }
 int CanLaunchWorker(int currentSecond,int currentNano,int LaunchTimeSec,int LaunchTimeNano)
 {//sees if timeinterval t has passed and we can laucnh nxt worker
- if(LaunchTimeSec <= currentSecond && LaunchTimeNano <= currentNano)
- {
- return 1;
- }	 
- return 0;
+	if(LaunchTimeSec <= currentSecond && LaunchTimeNano <= currentNano)
+	{
+		return 1;
+	}	 
+	return 0;
 }
 
 void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano,int timeIntervalSec, int* eventSec, int* eventNano)
@@ -551,12 +551,12 @@ void GenerateTimeToEvent(int currentSecond,int currentNano,int timeIntervalNano,
 	*(eventSec) = currentSecond + timeIntervalSec;
 	if(currentNano + timeIntervalNano >= MAX_NANOSECOND)
 	{
-	*(eventNano) = (currentNano + timeIntervalNano) - MAX_NANOSECOND;
-	*(eventSec) = *(eventSec) + 1;
+		*(eventNano) = (currentNano + timeIntervalNano) - MAX_NANOSECOND;
+		*(eventSec) = *(eventSec) + 1;
 	}
 	else
 	{
-	*(eventNano) = (currentNano + timeIntervalNano);
+		*(eventNano) = (currentNano + timeIntervalNano);
 	}
 }
 void WorkerLauncher(int amount, struct PCB table[], struct Sys_Time* clock, FILE* logger)
@@ -570,7 +570,7 @@ void WorkerLauncher(int amount, struct PCB table[], struct Sys_Time* clock, FILE
 	for(int i = 0 ; i < amount; i++)
 	{
 
-		
+
 		pid_t newProcess = fork();
 
 		if(newProcess < 0)
@@ -628,51 +628,51 @@ int HasHalfSecPassed(int currentSec, int currentNano, int halfSecMark, int halfN
 double getDataAfterDecimal(double data)
 { //example data = 5.2
 	//function will return 0.2
-return (data - (int)data);
+	return (data - (int)data);
 }
 void StoreWorkerEventWaitTime(struct PCB table[], pid_t workerId, double eventTime, struct Sys_Time* clock)
 {
-//calculate what time this processes event will occur on the system clock	
-int TimeToWaitNano = getDataAfterDecimal(eventTime) * MAX_NANOSECOND;
-int TimeToWaitSec = (int) eventTime;
-int EventTimeNano = 0;
-int EventTimeSec = 0;
-GenerateTimeToEvent(clock->seconds, clock->nanoseconds, TimeToWaitNano, TimeToWaitSec, &EventTimeSec, &EventTimeNano);
-//store that time in the processes eventWait variables using its pid so we know when to take this process out of blocked queue
-for(int i = 0; i < TABLE_SIZE;i++)
-{
-if(table[i].pid == workerId)
-{
-table[i].eventWaitSec = EventTimeSec;
-table[i].eventWaitNano = EventTimeNano;
+	//calculate what time this processes event will occur on the system clock	
+	int TimeToWaitNano = getDataAfterDecimal(eventTime) * MAX_NANOSECOND;
+	int TimeToWaitSec = (int) eventTime;
+	int EventTimeNano = 0;
+	int EventTimeSec = 0;
+	GenerateTimeToEvent(clock->seconds, clock->nanoseconds, TimeToWaitNano, TimeToWaitSec, &EventTimeSec, &EventTimeNano);
+	//store that time in the processes eventWait variables using its pid so we know when to take this process out of blocked queue
+	for(int i = 0; i < TABLE_SIZE;i++)
+	{
+		if(table[i].pid == workerId)
+		{
+			table[i].eventWaitSec = EventTimeSec;
+			table[i].eventWaitNano = EventTimeNano;
 
-}
-}
+		}
+	}
 }
 void StoreWorkerServiceTime(struct PCB table[], pid_t workerId, int timeWorkingNano)
 { 
-//if timeWorkingNano is negative then worker didnt finish its timeslice and teriminated fo make that value positive	
-if(timeWorkingNano < 0)
-{
-timeWorkingNano = timeWorkingNano * -1;
-}
-//add timeslice(timeWorkingNano) to proccesses total amount of time it got to run (serviceTime column) 
+	//if timeWorkingNano is negative then worker didnt finish its timeslice and teriminated fo make that value positive	
+	if(timeWorkingNano < 0)
+	{
+		timeWorkingNano = timeWorkingNano * -1;
+	}
+	//add timeslice(timeWorkingNano) to proccesses total amount of time it got to run (serviceTime column) 
 
-for(int i = 0; i < TABLE_SIZE;i++)
-{
-if(table[i].pid == workerId)
-{
- if(table[i].serviceTimeNano + timeWorkingNano >= MAX_NANOSECOND)
- {
- table[i].serviceTimeNano = (table[i].serviceTimeNano + timeWorkingNano) - MAX_NANOSECOND;
- table[i].serviceTimeSeconds = table[i].serviceTimeSeconds + 1; 
- }
- else
- {
- table[i].serviceTimeNano = (table[i].serviceTimeNano + timeWorkingNano); 
- }
-}
-}
+	for(int i = 0; i < TABLE_SIZE;i++)
+	{
+		if(table[i].pid == workerId)
+		{
+			if(table[i].serviceTimeNano + timeWorkingNano >= MAX_NANOSECOND)
+			{
+				table[i].serviceTimeNano = (table[i].serviceTimeNano + timeWorkingNano) - MAX_NANOSECOND;
+				table[i].serviceTimeSeconds = table[i].serviceTimeSeconds + 1; 
+			}
+			else
+			{
+				table[i].serviceTimeNano = (table[i].serviceTimeNano + timeWorkingNano); 
+			}
+		}
+	}
 
 }
 int GetWorkerIndexFromProcessTable(struct PCB table[], pid_t workerId)
@@ -748,52 +748,52 @@ void PrintProcessTable(struct PCB processTable[],int curTimeSeconds, int curTime
 }
 double GetTimeSpentWorking(struct PCB table[])
 {//compound together the amount of time all workers got to be in the RUNNING state for aka scheduled and ran
-double time = 0;
-for(int i = 0; i < TABLE_SIZE;i++)
-{
-time = time + (table[i].serviceTimeSeconds + ((double)table[i].serviceTimeNano / MAX_NANOSECOND));
-}
-return time;
+	double time = 0;
+	for(int i = 0; i < TABLE_SIZE;i++)
+	{
+		time = time + (table[i].serviceTimeSeconds + ((double)table[i].serviceTimeNano / MAX_NANOSECOND));
+	}
+	return time;
 }
 
 void Report(double totalWaitTimeOfAllWorkers,double totalTimeSpentBlocked, int amountBlocked, int workerAmount, struct PCB table[], struct Sys_Time* clock)
 {//print os statistics 
 
-double clockTimeSec = clock->seconds + ((double) clock->nanoseconds / MAX_NANOSECOND);
-double timeSpentWorking = GetTimeSpentWorking(table);
+	double clockTimeSec = clock->seconds + ((double) clock->nanoseconds / MAX_NANOSECOND);
+	double timeSpentWorking = GetTimeSpentWorking(table);
 
-printf("\nOS REPORT:\n");
-printf("Average CPU Utilization: %f %% \n", AvgCpuUtilization(timeSpentWorking, clockTimeSec));
-printf("CPU Idle Time: %f\n", IdleTime(clockTimeSec, timeSpentWorking));
-printf("Average Time Processor Spent Blocked: %f\n", AvgWaitTimeWhileBlocked(totalTimeSpentBlocked, amountBlocked));
-printf("Average Wait Time In Ready Queue: %f \n", AvgWaitTimeToRun(totalWaitTimeOfAllWorkers, workerAmount));
+	printf("\nOS REPORT:\n");
+	printf("Average CPU Utilization: %f %% \n", AvgCpuUtilization(timeSpentWorking, clockTimeSec));
+	printf("CPU Idle Time: %f\n", IdleTime(clockTimeSec, timeSpentWorking));
+	printf("Average Time Processor Spent Blocked: %f\n", AvgWaitTimeWhileBlocked(totalTimeSpentBlocked, amountBlocked));
+	printf("Average Wait Time In Ready Queue: %f \n", AvgWaitTimeToRun(totalWaitTimeOfAllWorkers, workerAmount));
 
 }
 //calculation formulas for avg. cpu utilization, cpu idle time, avg wait time in blocked queue, avg wait time waiting to be scheduled
 double AvgCpuUtilization(double timeRunningProcesses, double totalSysTime)
 {
-double ans = (timeRunningProcesses / totalSysTime) * 100;
-return ans;
+	double ans = (timeRunningProcesses / totalSysTime) * 100;
+	return ans;
 }
 double IdleTime(double totalSysTime, double timeRunningProccesses)
 {
-double ans = (totalSysTime - timeRunningProccesses);
-return ans;
+	double ans = (totalSysTime - timeRunningProccesses);
+	return ans;
 }
 double AvgWaitTimeWhileBlocked(double totalTimeBlocked,int amountBlocked)
 {
-if(amountBlocked == 0)
-{
-return 0;
-}
-double ans = totalTimeBlocked / amountBlocked;
-return ans;
+	if(amountBlocked == 0)
+	{
+		return 0;
+	}
+	double ans = totalTimeBlocked / amountBlocked;
+	return ans;
 
 }
 double AvgWaitTimeToRun(double totalWaitTimeInReady,int amountOfWorkers)
 {
-double ans = totalWaitTimeInReady / amountOfWorkers;
-return ans;
+	double ans = totalWaitTimeInReady / amountOfWorkers;
+	return ans;
 
 }	
 
